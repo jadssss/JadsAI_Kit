@@ -39,5 +39,6 @@ jadsai-kit cli --help
 License / Лицензия
 MIT License. See LICENSE for details.
 Лицензия MIT. Подробности в файле LICENSE.
+```
 
 Copyright (c) 2025 jads___
