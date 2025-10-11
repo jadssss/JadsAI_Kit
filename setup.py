@@ -3,15 +3,15 @@ from setuptools import setup, find_packages
 
 setup(
     name="jadsai_kit",
-    version="0.0.1",
-    packages=find_packages(),
+    version="0.0.2",
+    packages=find_packages(include=['jadsai_kit', 'jadsai_kit.*']),
     install_requires=[
         'tensorflow>=2.10.0',
         'numpy>=1.21.0',
     ],
     entry_points={
         'console_scripts': [
-            'jadsai-kit = jadsai_kit.core:main',
+            'jadsai-kit=jadsai_kit.core:main',
         ],
     },
     author="jads___",
