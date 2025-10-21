@@ -3,19 +3,23 @@ import tensorflow as tf
 import os
 from PIL import Image
 from utils.logger import get_logger
+import tensorflow.keras.preprocessing.image as img_aug
+from tqdm import tqdm
 
 class DataLoader:
     def __init__(self):
         self.logger = get_logger(__name__)
         self.alphabet = 'abcdefghijklmnopqrstuvwxyzабвгдеёжзийклмнопрстуфхцчшщъыьэюя0123456789'
         self.char_to_int = {char: idx for idx, char in enumerate(self.alphabet)}
+        self.int_to_char = {idx: char for idx, char in enumerate(self.alphabet)}
 
     def load_captcha_dataset(self, dir_path, img_size=(128, 32), grayscale=True):
-        """Загрузка датасета капчи из папки с [метка].png"""
+        """Загрузка датасета капчи с аугментацией и прогресс-баром"""
         try:
             x, y = [], []
             valid_chars = set(self.alphabet)
-            for filename in os.listdir(dir_path):
+            files = [f for f in os.listdir(dir_path) if f.endswith('.png')]
+            for filename in tqdm(files, desc="Loading captcha dataset", unit="file"):
                 if not filename.endswith('.png'):
                     continue
                 label = filename.replace('.png', '')
@@ -28,9 +32,14 @@ class DataLoader:
                 if grayscale:
                     img = img.convert('L')
                     img_array = np.array(img) / 255.0
-                    img_array = np.expand_dims(img_array, axis=-1)  # (H, W, 1)
+                    img_array = np.expand_dims(img_array, axis=-1)
                 else:
-                    img_array = np.array(img) / 255.0  # (H, W, 3)
+                    img_array = np.array(img) / 255.0
+                # Аугментация
+                img_array = img_aug.random_rotation(img_array, rg=20)
+                img_array = img_aug.random_shift(img_array, wrg=0.1, hrg=0.1)
+                img_array = img_aug.random_shear(img_array, intensity=0.1)
+                img_array = tf.image.random_brightness(img_array, max_delta=0.1).numpy()  # Замена random_noise
                 x.append(img_array)
                 y_int = [self.char_to_int[c] for c in label]
                 y.append(y_int)
@@ -38,7 +47,7 @@ class DataLoader:
             if not x:
                 raise ValueError("Не найдено подходящих изображений")
             x = np.array(x)
-            y = np.array([np.pad(seq, (0, 8 - len(seq)), constant_values=-1) for seq in y])  # Паддинг до 8
+            y = np.array([np.pad(seq, (0, 8 - len(seq)), constant_values=-1) for seq in y])
             split = int(len(x) * 0.8)
             train_data = (x[:split], y[:split])
             test_data = (x[split:], y[split:])
@@ -48,33 +57,25 @@ class DataLoader:
             self.logger.error(f"Ошибка загрузки капча-датасета: {e}")
             raise
 
-    def load_data(self, dataset='mnist', custom_path=None):
-        """Загрузка данных: MNIST или .npz"""
+    def load_data(self, dir_path):
+        """Загрузка других датасетов"""
         try:
-            if dataset.lower() == 'mnist':
-                (x_train, y_train), (x_test, y_test) = tf.keras.datasets.mnist.load_data()
-                x_train, x_test = x_train / 255.0, x_test / 255.0
-                x_train = np.expand_dims(x_train, -1)
-                x_test = np.expand_dims(x_test, -1)
-                self.logger.info(f"MNIST загружен: train={x_train.shape}, test={x_test.shape}")
-                return (x_train, y_train), (x_test, y_test)
-            elif custom_path and os.path.exists(custom_path):
-                data = np.load(custom_path)
-                required_keys = ['x_train', 'y_train', 'x_test', 'y_test']
-                if not all(k in data for k in required_keys):
-                    raise ValueError(f".npz должен содержать: {required_keys}")
-                x_train, y_train = data['x_train'], data['y_train']
-                x_test, y_test = data['x_test'], data['y_test']
-                if x_train.shape[0] != y_train.shape[0] or x_test.shape[0] != y_test.shape[0]:
-                    raise ValueError("Несоответствие размеров данных и меток")
-                self.logger.info(f"Кастомный датасет: train={x_train.shape}, test={x_test.shape}")
-                return (x_train, y_train), (x_test, y_test)
-            else:
-                raise ValueError(f"Датасет {dataset} или путь {custom_path} не поддерживаются")
+            x, y = [], []
+            for filename in os.listdir(dir_path):
+                img_path = os.path.join(dir_path, filename)
+                img = Image.open(img_path)
+                img_array = np.array(img) / 255.0
+                x.append(img_array)
+                label = filename.split('_')[0]
+                y.append(label)
+            x = np.array(x)
+            y = np.array(y)
+            self.logger.info(f"Датасет загружен: x={x.shape}, y={y.shape}")
+            return x, y
         except Exception as e:
-            self.logger.error(f"Ошибка загрузки данных: {e}")
+            self.logger.error(f"Ошибка загрузки датасета: {e}")
             raise
 
     def get_alphabet(self):
-        """Возвращает алфавит для декодирования"""
-        return self.alphabet
+        """Возвращает алфавит и словари"""
+        return self.alphabet, self.char_to_int, self.int_to_char
