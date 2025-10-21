@@ -4,6 +4,7 @@ from core.model_builder import ModelBuilder
 from core.data_loader import DataLoader
 from core.trainer import Trainer
 from core.gpu_checker import GPUChecker
+from core.predictor import Predictor
 from utils.logger import get_logger
 
 class NeuralNetworkGUI:
@@ -15,6 +16,7 @@ class NeuralNetworkGUI:
         self.data_loader = DataLoader()
         self.trainer = Trainer(self.model_builder)
         self.gpu_checker = GPUChecker(verbose=True)
+        self.predictor = Predictor(self.model_builder, self.data_loader)
         self.data = None
         self.create_widgets()
 
@@ -24,16 +26,16 @@ class NeuralNetworkGUI:
         main_frame.pack(pady=5, padx=10, fill='x')
 
         ttk.Label(main_frame, text="Архитектура:").grid(row=0, column=0, sticky='w')
-        self.arch_var = tk.StringVar(value="cnn")
-        arch_menu = ttk.OptionMenu(main_frame, self.arch_var, "cnn", "cnn", "rnn", "transformer")
+        self.arch_var = tk.StringVar(value="crnn")
+        arch_menu = ttk.OptionMenu(main_frame, self.arch_var, "crnn", "cnn", "rnn", "transformer", "crnn")
         arch_menu.grid(row=0, column=1, sticky='w', pady=2)
 
         ttk.Label(main_frame, text="Эпохи:").grid(row=1, column=0, sticky='w')
-        self.epochs_var = tk.IntVar(value=5)
+        self.epochs_var = tk.IntVar(value=10)
         ttk.Spinbox(main_frame, from_=1, to=100, textvariable=self.epochs_var, width=5).grid(row=1, column=1, sticky='w', pady=2)
 
         ttk.Label(main_frame, text="Batch size:").grid(row=2, column=0, sticky='w')
-        self.batch_var = tk.IntVar(value=32)
+        self.batch_var = tk.IntVar(value=64)
         ttk.Spinbox(main_frame, from_=16, to=512, textvariable=self.batch_var, width=5).grid(row=2, column=1, sticky='w', pady=2)
 
         ttk.Label(main_frame, text="Активация:").grid(row=3, column=0, sticky='w')
@@ -51,23 +53,23 @@ class NeuralNetworkGUI:
         ttk.Spinbox(main_frame, from_=0.0001, to=0.1, textvariable=self.lr_var, increment=0.0001, width=8).grid(row=5, column=1, sticky='w', pady=2)
 
         ttk.Label(main_frame, text="Dropout (0-0.5):").grid(row=6, column=0, sticky='w')
-        self.dropout_var = tk.DoubleVar(value=0.2)
+        self.dropout_var = tk.DoubleVar(value=0.3)
         ttk.Spinbox(main_frame, from_=0.0, to=0.5, textvariable=self.dropout_var, increment=0.1, width=5).grid(row=6, column=1, sticky='w', pady=2)
 
-        self.bn_var = tk.BooleanVar(value=False)
+        self.bn_var = tk.BooleanVar(value=True)
         ttk.Checkbutton(main_frame, text="Batch Normalization", variable=self.bn_var).grid(row=7, column=0, columnspan=2, sticky='w', pady=2)
 
         ttk.Label(main_frame, text="Conv слои (фильтры,kernel,stride,padding):").grid(row=8, column=0, sticky='w')
-        self.conv_layers_var = tk.StringVar(value="32,3,1,same;64,3,1,same")
+        self.conv_layers_var = tk.StringVar(value="32,3,1,same;64,3,1,same;128,3,1,same")
         ttk.Entry(main_frame, textvariable=self.conv_layers_var, width=30).grid(row=8, column=1, sticky='w', pady=2)
 
         ttk.Label(main_frame, text="Dense слои (юниты):").grid(row=9, column=0, sticky='w')
-        self.dense_layers_var = tk.StringVar(value="128,64")
+        self.dense_layers_var = tk.StringVar(value="128")
         ttk.Entry(main_frame, textvariable=self.dense_layers_var, width=15).grid(row=9, column=1, sticky='w', pady=2)
 
         ttk.Label(main_frame, text="Loss функция:").grid(row=10, column=0, sticky='w')
-        self.loss_var = tk.StringVar(value="sparse_categorical_crossentropy")
-        loss_menu = ttk.OptionMenu(main_frame, self.loss_var, "sparse_categorical_crossentropy", "sparse_categorical_crossentropy", "categorical_crossentropy")
+        self.loss_var = tk.StringVar(value="ctc_loss")
+        loss_menu = ttk.OptionMenu(main_frame, self.loss_var, "ctc_loss", "sparse_categorical_crossentropy", "categorical_crossentropy", "ctc_loss")
         loss_menu.grid(row=10, column=1, sticky='w', pady=2)
 
         self.progress = ttk.Progressbar(self.root, mode='determinate')
@@ -77,11 +79,13 @@ class NeuralNetworkGUI:
         btn_frame.pack(pady=5)
         ttk.Button(btn_frame, text="Тест GPU", command=self.test_gpu_gui).pack(side='left', padx=5)
         ttk.Button(btn_frame, text="Загрузить данные", command=self.load_data_gui).pack(side='left', padx=5)
+        ttk.Button(btn_frame, text="Загрузить капча-датасет", command=self.load_captcha_dataset_gui).pack(side='left', padx=5)
         ttk.Button(btn_frame, text="Создать модель", command=self.create_model_gui).pack(side='left', padx=5)
         ttk.Button(btn_frame, text="Обучить модель", command=self.train_model_gui).pack(side='left', padx=5)
         ttk.Button(btn_frame, text="Оценить модель", command=self.evaluate_model_gui).pack(side='left', padx=5)
         ttk.Button(btn_frame, text="Сохранить модель", command=self.save_model_gui).pack(side='left', padx=5)
         ttk.Button(btn_frame, text="Загрузить модель", command=self.load_model_gui).pack(side='left', padx=5)
+        ttk.Button(btn_frame, text="Предсказать капчу", command=self.predict_captcha_gui).pack(side='left', padx=5)
 
         self.log_text = tk.Text(self.root, height=12, width=80)
         self.log_text.pack(pady=5, padx=10, fill='both', expand=True)
@@ -114,6 +118,16 @@ class NeuralNetworkGUI:
             self.data = self.data_loader.load_data(dataset='mnist')
             self.log_message("Загружен MNIST")
 
+    def load_captcha_dataset_gui(self):
+        """Загрузка капча-датасета"""
+        dir_path = filedialog.askdirectory(title="Выберите папку с [метка].png")
+        if dir_path:
+            try:
+                self.data = self.data_loader.load_captcha_dataset(dir_path)
+                self.log_message(f"Капча-датасет загружен из {dir_path}")
+            except Exception as e:
+                messagebox.showerror("Ошибка", f"Не удалось загрузить: {e}")
+
     def create_model_gui(self):
         """Создание модели"""
         try:
@@ -136,9 +150,9 @@ class NeuralNetworkGUI:
                 'optimizer': self.opt_var.get(),
                 'lr': self.lr_var.get(),
                 'loss': self.loss_var.get(),
-                'metrics': ['accuracy']
+                'metrics': ['accuracy'] if self.loss_var.get() != 'ctc_loss' else []
             }
-            self.model_builder.create_model(self.arch_var.get(), config)
+            self.model_builder.create_model(self.arch_var.get(), config, input_shape=(32, 128, 1), num_classes=70)
             self.log_message(f"Модель {self.arch_var.get()} создана!")
         except Exception as e:
             messagebox.showerror("Ошибка", f"Не удалось создать модель: {e}")
@@ -183,10 +197,9 @@ class NeuralNetworkGUI:
             messagebox.showwarning("Предупреждение", "Сначала создайте модель!")
             return
         try:
-            loss, metrics = self.trainer.evaluate_model(self.data[1])
-            metrics_str = ', '.join([f"{k}: {v:.4f}" for k, v in zip(self.model_builder.model.metrics_names[1:], metrics)])
-            self.log_message(f"Оценка на тесте: loss={loss:.4f}, {metrics_str}")
-            messagebox.showinfo("Результат", f"Оценка: loss={loss:.4f}, {metrics_str}")
+            loss, _ = self.trainer.evaluate_model(self.data[1])
+            self.log_message(f"Оценка на тесте: loss={loss:.4f}")
+            messagebox.showinfo("Результат", f"Оценка: loss={loss:.4f}")
         except Exception as e:
             messagebox.showerror("Ошибка", f"Ошибка оценки: {e}")
 
@@ -204,3 +217,14 @@ class NeuralNetworkGUI:
         if path:
             self.model_builder.load_model(path)
             self.log_message(f"Загружено: {path}")
+
+    def predict_captcha_gui(self):
+        """Предсказание капчи"""
+        img_path = filedialog.askopenfilename(filetypes=[("PNG files", "*.png")])
+        if img_path:
+            try:
+                prediction = self.predictor.predict(img_path)
+                self.log_message(f"Предсказание для {img_path}: {prediction}")
+                messagebox.showinfo("Результат", f"Капча: {prediction}")
+            except Exception as e:
+                messagebox.showerror("Ошибка", f"Ошибка предсказания: {e}")

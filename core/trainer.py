@@ -22,7 +22,7 @@ class Trainer:
                 class TqdmCallback(tf.keras.callbacks.Callback):
                     def on_epoch_end(self, epoch, logs=None):
                         pbar.update(1)
-                        pbar.set_postfix({'acc': logs.get('accuracy', 0), 'val_acc': logs.get('val_accuracy', 0)})
+                        pbar.set_postfix({'loss': logs.get('loss', 0), 'val_loss': logs.get('val_loss', 0)})
                 
                 self.history = self.model_builder.model.fit(
                     train_data[0], train_data[1],
@@ -40,14 +40,13 @@ class Trainer:
             raise
 
     def evaluate_model(self, test_data):
-        """Оценка модели"""
+        """Оценка модели (для CTC loss — только loss)"""
         try:
             if not self.model_builder.model:
                 raise ValueError("Модель не создана")
-            loss, *metrics = self.model_builder.model.evaluate(test_data[0], test_data[1], verbose=0)
-            metrics_str = ', '.join([f"{k}: {v:.4f}" for k, v in zip(self.model_builder.model.metrics_names[1:], metrics)])
-            self.logger.info(f"Оценка на тесте: loss={loss:.4f}, {metrics_str}")
-            return loss, metrics
+            loss = self.model_builder.model.evaluate(test_data[0], test_data[1], verbose=0)
+            self.logger.info(f"Оценка на тесте: loss={loss:.4f}")
+            return loss, []
         except Exception as e:
             self.logger.error(f"Ошибка оценки: {e}")
             raise
